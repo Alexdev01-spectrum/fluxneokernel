@@ -1,0 +1,157 @@
+run 3 root=nova-susfs hz=1000
+== error lines ==
+2740:make[2]: *** [/home/runner/kernel/common/scripts/Makefile.build:273: fs/susfs.o] Error 1
+2741:make[1]: *** [/home/runner/kernel/common/Makefile:1944: fs] Error 2
+2742:make[1]: *** Waiting for unfinished jobs....
+4438:make: *** [/home/runner/kernel/common/Makefile:192: __sub-make] Error 2
+== tail ==
+  AR      drivers/staging/built-in.a
+  AR      drivers/firmware/xilinx/built-in.a
+  CC      drivers/hid/hid-playstation.o
+  CC      drivers/of/of_reserved_mem.o
+  AR      drivers/platform/surface/built-in.a
+  AR      drivers/platform/built-in.a
+  CC      drivers/firmware/arm_scpi.o
+  CC      drivers/firmware/efi/efi-init.o
+  CC      drivers/hid/hid-roccat.o
+  CC      drivers/mailbox/mailbox.o
+  AR      drivers/of/built-in.a
+  CC      drivers/mailbox/hi3660-mailbox.o
+  CC      drivers/firmware/efi/arm-runtime.o
+  CC      drivers/hid/hid-roccat-common.o
+  CC      drivers/hwspinlock/hwspinlock_core.o
+  CC      drivers/hid/hid-roccat-arvo.o
+  CC      drivers/mailbox/hi6220-mailbox.o
+  CC      drivers/firmware/efi/earlycon.o
+  CC      drivers/hid/hid-roccat-isku.o
+  CC      drivers/mailbox/sun6i-msgbox.o
+  AR      drivers/firmware/efi/built-in.a
+  AR      drivers/firmware/built-in.a
+  CC      drivers/hid/hid-roccat-kone.o
+  AR      drivers/hwspinlock/built-in.a
+  CC      drivers/hid/hid-roccat-koneplus.o
+  CC      drivers/remoteproc/remoteproc_core.o
+  AR      drivers/mailbox/built-in.a
+  CC      drivers/hid/hid-roccat-konepure.o
+  CC      drivers/remoteproc/remoteproc_coredump.o
+  CC      drivers/hid/hid-roccat-kovaplus.o
+  CC      drivers/rpmsg/rpmsg_core.o
+  CC      drivers/hid/hid-roccat-lua.o
+  CC      drivers/remoteproc/remoteproc_debugfs.o
+  CC      drivers/hid/hid-roccat-pyra.o
+  AR      drivers/devfreq/event/built-in.a
+  CC      drivers/devfreq/devfreq.o
+  CC      drivers/rpmsg/rpmsg_char.o
+  CC      drivers/remoteproc/remoteproc_sysfs.o
+  CC      drivers/hid/hid-roccat-ryos.o
+  AR      drivers/rpmsg/built-in.a
+  CC      drivers/devfreq/devfreq-event.o
+  CC      drivers/hid/hid-roccat-savu.o
+  CC      drivers/remoteproc/remoteproc_virtio.o
+  CC      drivers/devfreq/governor_simpleondemand.o
+  CC      drivers/hid/hid-sony.o
+  CC      drivers/devfreq/governor_performance.o
+  CC      drivers/extcon/extcon.o
+  CC      drivers/remoteproc/remoteproc_elf_loader.o
+  CC      drivers/devfreq/governor_powersave.o
+  CC      drivers/hid/hid-steam.o
+  CC      drivers/devfreq/governor_userspace.o
+  CC      drivers/extcon/devres.o
+  CC      drivers/hid/hid-uclogic-core.o
+  CC      drivers/devfreq/governor_passive.o
+  CC      drivers/remoteproc/remoteproc_cdev.o
+  CC      drivers/hid/hid-uclogic-rdesc.o
+  AR      drivers/extcon/built-in.a
+  AR      drivers/iio/accel/built-in.a
+  AR      drivers/devfreq/built-in.a
+  AR      drivers/iio/adc/built-in.a
+  AR      drivers/iio/addac/built-in.a
+  CC      drivers/hid/hid-uclogic-params.o
+  AR      drivers/iio/afe/built-in.a
+  AR      drivers/iio/amplifiers/built-in.a
+  AR      drivers/iio/buffer/built-in.a
+  AR      drivers/remoteproc/built-in.a
+  AR      drivers/iio/chemical/built-in.a
+  CC      drivers/hid/wacom_wac.o
+  AR      drivers/iio/common/cros_ec_sensors/built-in.a
+  AR      drivers/iio/common/hid-sensors/built-in.a
+  AR      drivers/iio/common/inv_sensors/built-in.a
+  AR      drivers/iio/common/ms_sensors/built-in.a
+  AR      drivers/iio/common/ssp_sensors/built-in.a
+  AR      drivers/iio/common/st_sensors/built-in.a
+  AR      drivers/iio/dac/built-in.a
+  CC      drivers/powercap/dtpm.o
+  AR      drivers/iio/common/built-in.a
+  AR      drivers/iio/dummy/built-in.a
+  AR      drivers/iio/gyro/built-in.a
+  AR      drivers/iio/frequency/built-in.a
+  AR      drivers/iio/health/built-in.a
+  AR      drivers/iio/humidity/built-in.a
+  AR      drivers/iio/imu/bmi160/built-in.a
+  AR      drivers/iio/imu/inv_icm42600/built-in.a
+  AR      drivers/iio/imu/inv_mpu6050/built-in.a
+  AR      drivers/iio/imu/st_lsm6dsx/built-in.a
+  AR      drivers/iio/imu/built-in.a
+  AR      drivers/iio/light/built-in.a
+  CC      drivers/perf/arm_pmu.o
+  AR      drivers/iio/magnetometer/built-in.a
+  AR      drivers/iio/multiplexer/built-in.a
+  AR      drivers/iio/orientation/built-in.a
+  CC      drivers/powercap/powercap_sys.o
+  AR      drivers/iio/position/built-in.a
+  AR      drivers/iio/potentiometer/built-in.a
+  AR      drivers/iio/potentiostat/built-in.a
+  AR      drivers/iio/pressure/built-in.a
+  AR      drivers/iio/proximity/built-in.a
+  AR      drivers/iio/resolver/built-in.a
+  AR      drivers/iio/temperature/built-in.a
+  AR      drivers/iio/trigger/built-in.a
+  CC      drivers/iio/industrialio-core.o
+  CC      drivers/hid/wacom_sys.o
+  AR      drivers/powercap/built-in.a
+  CC      drivers/perf/arm_pmu_platform.o
+  CC      drivers/ras/ras.o
+  AR      drivers/perf/built-in.a
+  CC      drivers/hid/hid-wiimote-core.o
+  CC      drivers/iio/industrialio-event.o
+  AR      drivers/hwtracing/intel_th/built-in.a
+  CC      drivers/ras/debugfs.o
+  CC      drivers/hid/hid-wiimote-modules.o
+  CC      drivers/android/binderfs.o
+  AR      drivers/ras/built-in.a
+  CC      drivers/iio/inkern.o
+  CC      drivers/android/binder.o
+  CC      drivers/hid/hid-wiimote-debug.o
+  CC      drivers/nvmem/core.o
+  CC      drivers/iio/industrialio-buffer.o
+  AR      drivers/hid/built-in.a
+  CC      drivers/gnss/core.o
+  AR      drivers/nvmem/built-in.a
+  CC      drivers/iio/industrialio-trigger.o
+  CC      drivers/android/binder_alloc.o
+  AR      drivers/gnss/built-in.a
+  CC      drivers/android/debug_symbols.o
+  CC      drivers/interconnect/core.o
+  AR      drivers/iio/built-in.a
+-- KDIR: 
+-- MDIR: /home/runner/kernel/KernelSU/kernel
+-- SukiSU-Nova version: 30007 [v3.0.0-5a3ec414@builtin-new]
+-- KERNEL_VERSION: 5.10
+-- KERNEL_TYPE: GKI 2.0
+-- SukiSU-Nova: using SUSFS_INLINE_HOOK
+-- KPM is disabled
+-- KernelSU Manager package name: com.sukisu.nova
+-- KernelSU Manager signature size: 0x35c
+-- KernelSU Manager signature hash: 947ae944f3de4ed4c21a7e4f7953ecf351bfa2b36239da37a34111ad29993eef
+-- KernelSU/compat: iterate_dir found!
+  CC      drivers/interconnect/bulk.o
+-- KernelSU/compat: f_op->read_iter found!
+
+-- SUSFS_VERSION: v2.4.0
+  CC      drivers/android/vendor_hooks.o
+  AR      drivers/interconnect/built-in.a
+  CC      drivers/kernelsu/ksu.o
+  AR      drivers/kernelsu/built-in.a
+  AR      drivers/android/built-in.a
+  AR      drivers/built-in.a
+make: *** [/home/runner/kernel/common/Makefile:192: __sub-make] Error 2
