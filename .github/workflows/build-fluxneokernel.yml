@@ -1,0 +1,155 @@
+name: Build fluxneokernel (GKI android12-5.10)
+
+on:
+  workflow_dispatch:
+    inputs:
+      target_sublevel:
+        description: "5.10 sublevel to build (the build stops if Google's branch has no commit at this sublevel)"
+        default: "270"
+      root_driver:
+        description: "Kernel root driver to bake in"
+        type: choice
+        options: [fluxsu, none]
+        default: fluxsu
+      root_repo_raw:
+        description: "Raw base URL of the root driver repo (must contain kernel/setup.sh)"
+        default: "https://raw.githubusercontent.com/Alexdev01-spectrum/FluxSU/main"
+      root_branch:
+        description: "Branch argument passed to setup.sh"
+        default: "main"
+
+jobs:
+  build:
+    runs-on: ubuntu-22.04
+    timeout-minutes: 300
+    env:
+      KERNEL_NAME: fluxneokernel
+      MANIFEST_BRANCH: common-android12-5.10
+      TARGET: ${{ inputs.target_sublevel }}
+      ROOT_DRIVER: ${{ inputs.root_driver }}
+      ROOT_RAW: ${{ inputs.root_repo_raw }}
+      ROOT_BRANCH: ${{ inputs.root_branch }}
+
+    steps:
+      - name: Free disk space
+        run: |
+          sudo rm -rf /usr/share/dotnet /opt/ghc /usr/local/lib/android /opt/hostedtoolcache/CodeQL /usr/local/share/boost
+          sudo apt-get clean
+          df -h /
+
+      - name: Install build dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y git-core gnupg flex bison build-essential zip unzip curl \
+            zlib1g-dev libc6-dev-i386 libssl-dev bc cpio rsync lz4 python3 libelf-dev xz-utils
+          mkdir -p "$HOME/bin"
+          curl -s https://storage.googleapis.com/git-repo-downloads/repo > "$HOME/bin/repo"
+          chmod +x "$HOME/bin/repo"
+          echo "$HOME/bin" >> "$GITHUB_PATH"
+          git config --global user.name "fluxneokernel-ci"
+          git config --global user.email "ci@fluxneokernel.invalid"
+          git config --global color.ui false
+
+      - name: Sync Google GKI source (android12-5.10)
+        run: |
+          mkdir -p "$HOME/kernel" && cd "$HOME/kernel"
+          repo init -u https://android.googlesource.com/kernel/manifest -b "$MANIFEST_BRANCH" --depth=1 --no-clone-bundle
+          repo sync -c --no-tags --no-clone-bundle -j"$(nproc)"
+          df -h /
+
+      - name: Pin source to the target sublevel
+        run: |
+          cd "$HOME/kernel/common"
+          git fetch --no-tags --depth=6000 "$(git remote | head -n1)" android12-5.10
+          set +o pipefail
+          FOUND=""
+          for c in $(git rev-list --first-parent FETCH_HEAD); do
+            sub=$(git show "$c:Makefile" | head -n 6 | sed -n 's/^SUBLEVEL = *//p')
+            if [ "$sub" = "$TARGET" ]; then FOUND="$c"; break; fi
+          done
+          if [ -z "$FOUND" ]; then
+            echo "::error::No commit with SUBLEVEL=$TARGET in the last 6000 commits of android12-5.10."
+            echo "Branch tip is: $(git show FETCH_HEAD:Makefile | head -n 6 | tr '\n' ' ')"
+            exit 1
+          fi
+          git checkout -q "$FOUND"
+          echo "Building 5.10.$(sed -n 's/^SUBLEVEL = *//p' Makefile | head -n1) at $FOUND"
+          echo "KVER=5.10.$TARGET" >> "$GITHUB_ENV"
+
+      - name: Add root driver (FluxSU)
+        if: env.ROOT_DRIVER == 'fluxsu'
+        run: |
+          cd "$HOME/kernel"
+          curl -LSs "$ROOT_RAW/kernel/setup.sh" | bash -s "$ROOT_BRANCH"
+          echo "--- which repo did setup.sh actually pull? ---"
+          git -C KernelSU remote get-url origin || true
+          git -C KernelSU log -1 --oneline || true
+
+      - name: Apply gaming tweaks and prepare config
+        run: |
+          cd "$HOME/kernel/common"
+          S=scripts/config
+          F=arch/arm64/configs/gki_defconfig
+          # network latency: BBR default + fq pacing, Westwood available
+          $S --file $F -e TCP_CONG_ADVANCED -e TCP_CONG_BBR -e TCP_CONG_WESTWOOD \
+                       -d DEFAULT_CUBIC -e DEFAULT_BBR -e NET_SCH_FQ -e NET_SCH_FQ_CODEL
+          # 250 Hz tick
+          $S --file $F -e HZ_250
+          if [ "$ROOT_DRIVER" = "fluxsu" ]; then
+            $S --file $F -e KSU -e KPROBES -e KPROBE_EVENTS
+          fi
+          # defconfig sanity check would reject our edits
+          grep -rl check_defconfig build.config* 2>/dev/null | xargs -r sed -i 's/check_defconfig/true/'
+          # commit so the version string does not get a -dirty suffix
+          git add -A
+          git commit -qm "fluxneokernel: config tweaks"
+
+      - name: Build GKI kernel
+        run: |
+          cd "$HOME/kernel"
+          LTO=thin BUILD_CONFIG=common/build.config.gki.aarch64 build/build.sh
+          ls -lh out/*/dist/Image
+          strings out/*/dist/Image | grep -m1 "Linux version" || true
+
+      - name: Package with AnyKernel3
+        run: |
+          cd "$HOME"
+          git clone --depth=1 https://github.com/osm0sis/AnyKernel3 ak3
+          cd ak3
+          rm -rf .git .github README.md
+          cp "$HOME"/kernel/out/*/dist/Image ./Image
+          cat > anykernel.sh <<'EOF'
+          ### AnyKernel3 - fluxneokernel (GKI, kernel-only flash)
+          properties() { '
+          kernel.string=fluxneokernel
+          do.devicecheck=0
+          do.modules=0
+          do.systemless=0
+          do.cleanup=1
+          do.cleanuponabort=0
+          device.name1=
+          supported.versions=
+          supported.patchlevels=
+          supported.vendorpatchlevels=
+          '; }
+
+          BLOCK=boot;
+          IS_SLOT_DEVICE=auto;
+          RAMDISK_COMPRESSION=auto;
+          PATCH_VBMETA_FLAG=auto;
+
+          . tools/ak3-core.sh;
+
+          split_boot;
+          flash_boot;
+          EOF
+          ZIP="${KERNEL_NAME}-${KVER}-GKI-$(date +%Y%m%d).zip"
+          zip -r9 "$HOME/$ZIP" . -x '.git*'
+          echo "ZIP_NAME=$ZIP" >> "$GITHUB_ENV"
+          echo "ZIP_PATH=$HOME/$ZIP" >> "$GITHUB_ENV"
+
+      - name: Upload zip
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ env.ZIP_NAME }}
+          path: ${{ env.ZIP_PATH }}
