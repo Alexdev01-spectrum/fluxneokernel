@@ -148,6 +148,16 @@ jobs:
                          -e KSU_SUSFS_OPEN_REDIRECT -e KSU_SUSFS_SUS_MAP -d KSU_SUSFS_ENABLE_LOG
           fi
           grep -rl check_defconfig build.config* 2>/dev/null | xargs -r sed -i 's/check_defconfig/true/'
+          cat > build.config.fluxneo <<'EOF'
+          . ${ROOT_DIR}/${KERNEL_DIR}/build.config.gki.aarch64
+          MODULES_ORDER=
+          KMI_SYMBOL_LIST_STRICT_MODE=
+          TRIM_NONLISTED_KMI=
+          BUILD_SYSTEM_DLKM=
+          BUILD_GKI_ARTIFACTS=
+          BUILD_GKI_CERTIFICATION_TOOLS=
+          MAKE_GOALS="Image"
+          EOF
           git add -A
           git commit -qm "fluxneokernel: tweaks, susfs, config"
 
@@ -156,7 +166,7 @@ jobs:
         run: |
           set -o pipefail
           cd "$HOME/kernel"
-          LTO=thin BUILD_CONFIG=common/build.config.gki.aarch64 build/build.sh 2>&1 | tee "$HOME/build.log"
+          LTO=thin BUILD_CONFIG=common/build.config.fluxneo build/build.sh -k 2>&1 | tee "$HOME/build.log"
           ls -lh out/*/dist/Image
           strings out/*/dist/Image | grep -m1 "Linux version" || true
 
@@ -165,12 +175,21 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
+          B="$HOME/build.log"
           {
             echo "run ${{ github.run_number }} root=$ROOT_DRIVER hz=$TICK"
-            echo "== error lines =="
-            [ -f "$HOME/build.log" ] && grep -n -i -E "error:|undefined reference|\*\*\*|fatal|failed|no rule|cannot|not found" "$HOME/build.log" | grep -v -E "Werror|error-limit" | cut -c1-400 | head -80
-            echo "== tail =="
-            [ -f "$HOME/build.log" ] && tail -150 "$HOME/build.log" | cut -c1-400
+            if [ -f "$B" ]; then
+              sed 's/\x1b\[[0-9;]*[a-zA-Z]//g' "$B" > "$HOME/clean.log"
+              echo "== compiler/linker errors =="
+              grep -n -E "error:|fatal error|undefined (symbol|reference)|ld.lld: error|ERROR" "$HOME/clean.log" | cut -c1-320 | head -120
+              echo "== context before first make failure =="
+              L=$(grep -n -m1 -E '^make.*\*\*\*' "$HOME/clean.log" | cut -d: -f1)
+              [ -n "$L" ] && sed -n "$((L>80?L-80:1)),$((L+4))p" "$HOME/clean.log" | cut -c1-320
+              echo "== tail =="
+              tail -40 "$HOME/clean.log" | cut -c1-320
+            else
+              echo "no build.log (failed before the build step)"
+            fi
           } > "$HOME/failure.txt" || true
           gh api -X PUT "repos/$GITHUB_REPOSITORY/contents/build-logs/run-${{ github.run_number }}.txt" \
             -f message="build failure log" -f content="$(base64 -w0 "$HOME/failure.txt")" -f branch=main
