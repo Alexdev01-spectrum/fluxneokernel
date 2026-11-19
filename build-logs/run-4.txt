@@ -1,0 +1,154 @@
+run 4 root=none hz=1000
+== error lines ==
+4678:ERROR: modules list out of date
+== tail ==
+  CC      drivers/devfreq/devfreq.o
+  CC      drivers/hid/hid-roccat-kovaplus.o
+  CC      drivers/extcon/extcon.o
+  CC      drivers/hid/hid-roccat-lua.o
+  CC      drivers/remoteproc/remoteproc_elf_loader.o
+  CC      drivers/hid/hid-roccat-pyra.o
+  CC      drivers/extcon/devres.o
+  CC      drivers/devfreq/devfreq-event.o
+  CC      drivers/hid/hid-roccat-ryos.o
+  CC      drivers/remoteproc/remoteproc_cdev.o
+  AR      drivers/extcon/built-in.a
+  CC      drivers/devfreq/governor_simpleondemand.o
+  CC      drivers/hid/hid-roccat-savu.o
+  AR      drivers/iio/accel/built-in.a
+  AR      drivers/iio/adc/built-in.a
+  AR      drivers/iio/addac/built-in.a
+  AR      drivers/iio/afe/built-in.a
+  AR      drivers/iio/amplifiers/built-in.a
+  AR      drivers/iio/buffer/built-in.a
+  AR      drivers/iio/chemical/built-in.a
+  AR      drivers/remoteproc/built-in.a
+  AR      drivers/iio/common/cros_ec_sensors/built-in.a
+  AR      drivers/iio/dac/built-in.a
+  AR      drivers/iio/common/hid-sensors/built-in.a
+  CC      drivers/devfreq/governor_performance.o
+  AR      drivers/iio/common/inv_sensors/built-in.a
+  AR      drivers/iio/common/ms_sensors/built-in.a
+  AR      drivers/iio/common/ssp_sensors/built-in.a
+  CC      drivers/hid/hid-sony.o
+  AR      drivers/iio/common/st_sensors/built-in.a
+  AR      drivers/iio/common/built-in.a
+  AR      drivers/iio/dummy/built-in.a
+  AR      drivers/iio/gyro/built-in.a
+  AR      drivers/iio/frequency/built-in.a
+  AR      drivers/iio/health/built-in.a
+  AR      drivers/iio/humidity/built-in.a
+  CC      drivers/powercap/dtpm.o
+  AR      drivers/iio/imu/bmi160/built-in.a
+  AR      drivers/iio/imu/inv_icm42600/built-in.a
+  AR      drivers/iio/imu/inv_mpu6050/built-in.a
+  AR      drivers/iio/imu/st_lsm6dsx/built-in.a
+  AR      drivers/iio/imu/built-in.a
+  AR      drivers/iio/light/built-in.a
+  AR      drivers/iio/magnetometer/built-in.a
+  AR      drivers/iio/multiplexer/built-in.a
+  CC      drivers/devfreq/governor_powersave.o
+  AR      drivers/iio/orientation/built-in.a
+  AR      drivers/iio/position/built-in.a
+  AR      drivers/iio/potentiometer/built-in.a
+  AR      drivers/iio/potentiostat/built-in.a
+  AR      drivers/iio/pressure/built-in.a
+  AR      drivers/iio/proximity/built-in.a
+  AR      drivers/iio/resolver/built-in.a
+  AR      drivers/iio/temperature/built-in.a
+  AR      drivers/iio/trigger/built-in.a
+  CC      drivers/iio/industrialio-core.o
+  CC      drivers/powercap/powercap_sys.o
+  CC      drivers/hid/hid-steam.o
+  CC      drivers/devfreq/governor_userspace.o
+  AR      drivers/powercap/built-in.a
+  CC      drivers/perf/arm_pmu.o
+  CC      drivers/devfreq/governor_passive.o
+  CC      drivers/hid/hid-uclogic-core.o
+  AR      drivers/devfreq/built-in.a
+  CC      drivers/iio/industrialio-event.o
+  CC      drivers/perf/arm_pmu_platform.o
+  CC      drivers/hid/hid-uclogic-rdesc.o
+  CC      drivers/hid/hid-uclogic-params.o
+  CC      drivers/iio/inkern.o
+  AR      drivers/perf/built-in.a
+  CC      drivers/ras/ras.o
+  CC      drivers/hid/wacom_wac.o
+  CC      drivers/iio/industrialio-buffer.o
+  AR      drivers/hwtracing/intel_th/built-in.a
+  CC      drivers/android/binderfs.o
+  CC      drivers/ras/debugfs.o
+  AR      drivers/ras/built-in.a
+  CC      drivers/android/binder.o
+  CC      drivers/iio/industrialio-trigger.o
+  CC      drivers/hid/wacom_sys.o
+  CC      drivers/nvmem/core.o
+  CC      drivers/hid/hid-wiimote-core.o
+  AR      drivers/nvmem/built-in.a
+  CC      drivers/android/binder_alloc.o
+  AR      drivers/iio/built-in.a
+  CC      drivers/android/debug_symbols.o
+  CC      drivers/hid/hid-wiimote-modules.o
+  CC      drivers/gnss/core.o
+  CC      drivers/hid/hid-wiimote-debug.o
+  CC      drivers/interconnect/core.o
+  AR      drivers/hid/built-in.a
+  CC      drivers/android/vendor_hooks.o
+  AR      drivers/gnss/built-in.a
+  CC      drivers/interconnect/bulk.o
+  AR      drivers/interconnect/built-in.a
+  AR      drivers/android/built-in.a
+  AR      drivers/built-in.a
+  CHK     include/generated/autoksyms.h
+  KSYMS   symbols: before=7299, after=7301, changed=2
+  UPD     include/generated/autoksyms.h
+  GEN     Makefile
+  CALL    /home/runner/kernel/common/scripts/atomic/check-atomics.sh
+  CALL    /home/runner/kernel/common/scripts/checksyscalls.sh
+  CHK     include/generated/compile.h
+  CHK     kernel/kheaders_data.tar.xz
+  GEN     kernel/kheaders_data.tar.xz
+  CC      net/ipv4/tcp_cong.o
+  AR      net/ipv4/built-in.a
+  AR      net/built-in.a
+  CC      kernel/kheaders.o
+  AR      kernel/built-in.a
+  CHK     include/generated/autoksyms.h
+  GEN     .version
+  CHK     include/generated/compile.h
+  GEN     .tmp_initcalls.lds
+  GEN     .tmp_symversions.lds
+  LTO     vmlinux.o
+  MODPOST vmlinux.symvers
+  MODINFO modules.builtin.modinfo
+  GEN     modules.builtin
+  LD      .tmp_vmlinux.kallsyms1
+  KSYMS   .tmp_vmlinux.kallsyms1.S
+  AS      .tmp_vmlinux.kallsyms1.o
+  LD      .tmp_vmlinux.kallsyms2
+  KSYMS   .tmp_vmlinux.kallsyms2.S
+  AS      .tmp_vmlinux.kallsyms2.o
+  LD      vmlinux
+  SORTTAB vmlinux
+  SYSMAP  System.map
+  OBJCOPY arch/arm64/boot/Image
+  LTO [M] net/ipv4/tcp_bic.lto.o
+  LTO [M] net/ipv4/tcp_htcp.lto.o
+  MODPOST modules-only.symvers
+  GEN     Module.symvers
+  LZ4     arch/arm64/boot/Image.lz4
+  CC [M]  net/ipv4/tcp_bic.mod.o
+  CC [M]  net/ipv4/tcp_htcp.mod.o
+  LD [M]  net/ipv4/tcp_bic.ko
+  LD [M]  net/ipv4/tcp_htcp.ko
++ set +x
+========================================================
+ Checking the list of modules:
+--- common/android/gki_aarch64_modules	2026-11-19 10:31:54.154686231 +0000
++++ /home/runner/kernel/out/android12-5.10/common/modules.order	2026-11-19 10:54:04.303320652 +0000
+@@ -0,0 +1,2 @@
++net/ipv4/tcp_bic.ko
++net/ipv4/tcp_htcp.ko
+ERROR: modules list out of date
+Update it with:
+cp /home/runner/kernel/out/android12-5.10/common/modules.order common/android/gki_aarch64_modules
