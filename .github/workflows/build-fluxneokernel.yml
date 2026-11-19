@@ -152,11 +152,28 @@ jobs:
           git commit -qm "fluxneokernel: tweaks, susfs, config"
 
       - name: Build GKI kernel
+        shell: bash
         run: |
+          set -o pipefail
           cd "$HOME/kernel"
-          LTO=thin BUILD_CONFIG=common/build.config.gki.aarch64 build/build.sh
+          LTO=thin BUILD_CONFIG=common/build.config.gki.aarch64 build/build.sh 2>&1 | tee "$HOME/build.log"
           ls -lh out/*/dist/Image
           strings out/*/dist/Image | grep -m1 "Linux version" || true
+
+      - name: Save failure log to repo
+        if: failure()
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          {
+            echo "run ${{ github.run_number }} root=$ROOT_DRIVER hz=$TICK"
+            echo "== error lines =="
+            [ -f "$HOME/build.log" ] && grep -n -i -E "error:|undefined reference|\*\*\*|fatal|failed|no rule|cannot|not found" "$HOME/build.log" | grep -v -E "Werror|error-limit" | cut -c1-400 | head -80
+            echo "== tail =="
+            [ -f "$HOME/build.log" ] && tail -150 "$HOME/build.log" | cut -c1-400
+          } > "$HOME/failure.txt" || true
+          gh api -X PUT "repos/$GITHUB_REPOSITORY/contents/build-logs/run-${{ github.run_number }}.txt" \
+            -f message="build failure log" -f content="$(base64 -w0 "$HOME/failure.txt")" -f branch=main
 
       - name: Show effective config
         run: |
