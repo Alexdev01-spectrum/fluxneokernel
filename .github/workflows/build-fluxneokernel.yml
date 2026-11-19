@@ -124,6 +124,12 @@ jobs:
           patch -p1 -F3 --no-backup-if-mismatch < susfs.patch
           rm -f susfs.patch
           find . -name '*.rej' -o -name '*.orig' | head
+          echo "--- SUSFS_LOGI_RL definitions ---"
+          grep -rn "define SUSFS_LOGI_RL" include fs || true
+          if ! grep -rqs "define SUSFS_LOGI_RL" include fs; then
+            echo "SUSFS_LOGI_RL missing in this susfs version, adding a ratelimited fallback"
+            printf '\n#ifndef SUSFS_LOGI_RL\n#define SUSFS_LOGI_RL(fmt, ...) pr_info_ratelimited(fmt, ##__VA_ARGS__)\n#endif\n' >> include/linux/susfs.h
+          fi
 
       - name: Apply tweaks and prepare config
         run: |
@@ -145,7 +151,7 @@ jobs:
             $S --file $F -e KSU_SUSFS -e KSU_SUSFS_SUS_PATH -e KSU_SUSFS_SUS_MOUNT \
                          -e KSU_SUSFS_SUS_KSTAT -e KSU_SUSFS_SPOOF_UNAME \
                          -e KSU_SUSFS_HIDE_KSU_SUSFS_SYMBOLS -e KSU_SUSFS_SPOOF_CMDLINE_OR_BOOTCONFIG \
-                         -e KSU_SUSFS_OPEN_REDIRECT -e KSU_SUSFS_SUS_MAP -d KSU_SUSFS_ENABLE_LOG
+                         -e KSU_SUSFS_OPEN_REDIRECT -e KSU_SUSFS_SUS_MAP -e KSU_SUSFS_ENABLE_LOG
           fi
           grep -rl check_defconfig build.config* 2>/dev/null | xargs -r sed -i 's/check_defconfig/true/'
           cat > build.config.fluxneo <<'EOF'
@@ -156,6 +162,9 @@ jobs:
           BUILD_SYSTEM_DLKM=
           BUILD_GKI_ARTIFACTS=
           BUILD_GKI_CERTIFICATION_TOOLS=
+          IN_KERNEL_MODULES=
+          BUILD_INITRAMFS=
+          SKIP_CP_KERNEL_HDR=1
           MAKE_GOALS="Image"
           EOF
           git add -A
@@ -164,11 +173,20 @@ jobs:
       - name: Build GKI kernel
         shell: bash
         run: |
-          set -o pipefail
           cd "$HOME/kernel"
+          set +e
           LTO=thin BUILD_CONFIG=common/build.config.fluxneo build/build.sh -k 2>&1 | tee "$HOME/build.log"
-          ls -lh out/*/dist/Image
-          strings out/*/dist/Image | grep -m1 "Linux version" || true
+          RC=${PIPESTATUS[0]}
+          set -e
+          IMG=$(find "$HOME/kernel/out" -path '*arch/arm64/boot/Image' -type f | head -n1)
+          if [ -z "$IMG" ]; then
+            echo "::error::Kernel Image was not produced (build.sh exit code $RC)"
+            exit 1
+          fi
+          [ "$RC" -ne 0 ] && echo "::warning::build.sh exited $RC after producing the Image (post-build packaging only)"
+          echo "IMAGE_PATH=$IMG" >> "$GITHUB_ENV"
+          ls -lh "$IMG"
+          strings "$IMG" | grep -m1 "Linux version" || true
 
       - name: Save failure log to repo
         if: failure()
@@ -206,7 +224,7 @@ jobs:
           git clone --depth=1 https://github.com/osm0sis/AnyKernel3 ak3
           cd ak3
           rm -rf .git .github README.md
-          cp "$HOME"/kernel/out/*/dist/Image ./Image
+          cp "$IMAGE_PATH" ./Image
           cat > anykernel.sh <<'EOF'
           ### AnyKernel3 - fluxneokernel (GKI, kernel-only flash)
           properties() { '
@@ -291,7 +309,7 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          UNAME=$(strings "$HOME"/kernel/out/*/dist/Image | grep -m1 "Linux version" || true)
+          UNAME=$(strings "$IMAGE_PATH" | grep -m1 "Linux version" || true)
           {
             echo "fluxneokernel $KVER (GKI android12-5.10), ${TICK} Hz tick"
             echo
