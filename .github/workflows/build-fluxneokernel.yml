@@ -4,31 +4,40 @@ on:
   workflow_dispatch:
     inputs:
       target_sublevel:
-        description: "5.10 sublevel to build (the build stops if Google's branch has no commit at this sublevel)"
+        description: "5.10 sublevel to build (stops if Google's branch has no commit at this sublevel)"
         default: "270"
-      root_driver:
-        description: "Kernel root driver to bake in"
+      tick_hz:
+        description: "Kernel tick rate"
         type: choice
-        options: [fluxsu, none]
-        default: fluxsu
-      root_repo_raw:
-        description: "Raw base URL of the root driver repo (must contain kernel/setup.sh)"
-        default: "https://raw.githubusercontent.com/Alexdev01-spectrum/FluxSU/main"
-      root_branch:
-        description: "Branch argument passed to setup.sh"
-        default: "main"
+        options: ["1000", "300", "250"]
+        default: "1000"
+      root_driver:
+        description: "nova-susfs = SukiSU-Nova driver with SUSFS (default). fluxsu = your FluxSU driver (no SUSFS in it yet)."
+        type: choice
+        options: [nova-susfs, fluxsu, none]
+        default: nova-susfs
+      nova_branch:
+        description: "SukiSU-Nova branch that carries the SUSFS integration"
+        default: "builtin-new"
+      susfs_branch:
+        description: "susfs4ksu (gitlab simonpunk) branch for the kernel patch"
+        default: "gki-android12-5.10"
+
+permissions:
+  contents: write
 
 jobs:
   build:
     runs-on: ubuntu-22.04
-    timeout-minutes: 300
+    timeout-minutes: 330
     env:
       KERNEL_NAME: fluxneokernel
       MANIFEST_BRANCH: common-android12-5.10
       TARGET: ${{ inputs.target_sublevel }}
+      TICK: ${{ inputs.tick_hz }}
       ROOT_DRIVER: ${{ inputs.root_driver }}
-      ROOT_RAW: ${{ inputs.root_repo_raw }}
-      ROOT_BRANCH: ${{ inputs.root_branch }}
+      NOVA_BRANCH: ${{ inputs.nova_branch }}
+      SUSFS_BRANCH: ${{ inputs.susfs_branch }}
 
     steps:
       - name: Free disk space
@@ -41,7 +50,7 @@ jobs:
         run: |
           sudo apt-get update
           sudo apt-get install -y git-core gnupg flex bison build-essential zip unzip curl \
-            zlib1g-dev libc6-dev-i386 libssl-dev bc cpio rsync lz4 python3 libelf-dev xz-utils
+            zlib1g-dev libc6-dev-i386 libssl-dev bc cpio rsync lz4 python3 libelf-dev xz-utils patch
           mkdir -p "$HOME/bin"
           curl -s https://storage.googleapis.com/git-repo-downloads/repo > "$HOME/bin/repo"
           chmod +x "$HOME/bin/repo"
@@ -76,33 +85,71 @@ jobs:
           echo "Building 5.10.$(sed -n 's/^SUBLEVEL = *//p' Makefile | head -n1) at $FOUND"
           echo "KVER=5.10.$TARGET" >> "$GITHUB_ENV"
 
-      - name: Add root driver (FluxSU)
-        if: env.ROOT_DRIVER == 'fluxsu'
+      - name: Add root driver
+        if: env.ROOT_DRIVER != 'none'
         run: |
           cd "$HOME/kernel"
-          curl -LSs "$ROOT_RAW/kernel/setup.sh" | bash -s "$ROOT_BRANCH"
-          echo "--- which repo did setup.sh actually pull? ---"
-          git -C KernelSU remote get-url origin || true
-          git -C KernelSU log -1 --oneline || true
+          if [ "$ROOT_DRIVER" = "fluxsu" ]; then
+            REPO=https://github.com/Alexdev01-spectrum/FluxSU; BR=main
+          else
+            REPO=https://github.com/SukiSU-Nova/SukiSU-Nova; BR="$NOVA_BRANCH"
+          fi
+          git clone --depth=1 -b "$BR" "$REPO" KernelSU
+          echo "ROOT_INFO=$REPO@$BR $(git -C KernelSU rev-parse --short HEAD)" >> "$GITHUB_ENV"
+          cd common/drivers
+          ln -sfn ../../KernelSU/kernel kernelsu
+          grep -q kernelsu Makefile || printf '\nobj-$(CONFIG_KSU) += kernelsu/\n' >> Makefile
+          grep -q 'drivers/kernelsu/Kconfig' Kconfig || sed -i '/endmenu/i source "drivers/kernelsu/Kconfig"' Kconfig
+          echo "Root driver: $REPO ($BR)"
+          grep -c SUSFS "$HOME/kernel/KernelSU/kernel/Kconfig" || true
 
-      - name: Apply gaming tweaks and prepare config
+      - name: Apply SUSFS kernel patch
+        if: env.ROOT_DRIVER == 'nova-susfs'
+        run: |
+          cd "$HOME"
+          git clone --depth=1 -b "$SUSFS_BRANCH" https://gitlab.com/simonpunk/susfs4ksu.git susfs4ksu
+          SUSFS_COMMIT=$(git -C susfs4ksu rev-parse --short HEAD)
+          SUSFS_VER=$(grep -rhoE 'SUSFS_VERSION[^"]*"[^"]+"' susfs4ksu/kernel_patches/include/linux/susfs.h | head -n1 || true)
+          echo "SUSFS_INFO=$SUSFS_BRANCH@$SUSFS_COMMIT $SUSFS_VER" >> "$GITHUB_ENV"
+          ls susfs4ksu/kernel_patches
+          PATCH=$(ls susfs4ksu/kernel_patches/50_add_susfs_in_gki-android12-5.10*.patch | head -n1)
+          cp "$PATCH" kernel/common/susfs.patch
+          cp -r susfs4ksu/kernel_patches/fs/* kernel/common/fs/
+          cp -r susfs4ksu/kernel_patches/include/linux/* kernel/common/include/linux/
+          cd kernel/common
+          if ! patch -p1 -F3 --no-backup-if-mismatch --dry-run < susfs.patch; then
+            echo "::error::SUSFS patch does not apply cleanly on this 5.10.$TARGET tree."
+            exit 1
+          fi
+          patch -p1 -F3 --no-backup-if-mismatch < susfs.patch
+          rm -f susfs.patch
+          find . -name '*.rej' -o -name '*.orig' | head
+
+      - name: Apply tweaks and prepare config
         run: |
           cd "$HOME/kernel/common"
           S=scripts/config
           F=arch/arm64/configs/gki_defconfig
-          # network latency: BBR default + fq pacing, Westwood available
+          # tick rate
+          for h in 100 250 300 1000; do [ "$h" = "$TICK" ] || $S --file $F -d HZ_$h; done
+          $S --file $F -e HZ_$TICK
+          # network: BBR default + fq pacing, Westwood available
           $S --file $F -e TCP_CONG_ADVANCED -e TCP_CONG_BBR -e TCP_CONG_WESTWOOD \
                        -d DEFAULT_CUBIC -e DEFAULT_BBR -e NET_SCH_FQ -e NET_SCH_FQ_CODEL
-          # 250 Hz tick
-          $S --file $F -e HZ_250
-          if [ "$ROOT_DRIVER" = "fluxsu" ]; then
+          # extra I/O schedulers selectable at runtime (default stays as shipped)
+          $S --file $F -e MQ_IOSCHED_KYBER -e IOSCHED_BFQ
+          if [ "$ROOT_DRIVER" != "none" ]; then
             $S --file $F -e KSU -e KPROBES -e KPROBE_EVENTS
           fi
-          # defconfig sanity check would reject our edits
+          if [ "$ROOT_DRIVER" = "nova-susfs" ]; then
+            $S --file $F -e KSU_SUSFS -e KSU_SUSFS_SUS_PATH -e KSU_SUSFS_SUS_MOUNT \
+                         -e KSU_SUSFS_SUS_KSTAT -e KSU_SUSFS_SPOOF_UNAME \
+                         -e KSU_SUSFS_HIDE_KSU_SUSFS_SYMBOLS -e KSU_SUSFS_SPOOF_CMDLINE_OR_BOOTCONFIG \
+                         -e KSU_SUSFS_OPEN_REDIRECT -e KSU_SUSFS_SUS_MAP -d KSU_SUSFS_ENABLE_LOG
+          fi
           grep -rl check_defconfig build.config* 2>/dev/null | xargs -r sed -i 's/check_defconfig/true/'
-          # commit so the version string does not get a -dirty suffix
           git add -A
-          git commit -qm "fluxneokernel: config tweaks"
+          git commit -qm "fluxneokernel: tweaks, susfs, config"
 
       - name: Build GKI kernel
         run: |
@@ -111,7 +158,13 @@ jobs:
           ls -lh out/*/dist/Image
           strings out/*/dist/Image | grep -m1 "Linux version" || true
 
-      - name: Package with AnyKernel3
+      - name: Show effective config
+        run: |
+          CFG=$(find "$HOME/kernel/out" -name .config -path '*common*' | head -n1)
+          echo "Config file: $CFG"
+          grep -E '^CONFIG_(HZ|HZ_[0-9]+|TCP_CONG_BBR|TCP_CONG_WESTWOOD|DEFAULT_TCP_CONG|NET_SCH_FQ|MQ_IOSCHED_KYBER|IOSCHED_BFQ|PREEMPT|KSU[A-Z_]*|KPROBES)[= ]' "$CFG" | tee "$HOME/effective-config.txt"
+
+      - name: Package kernel (AnyKernel3) and tweaks module
         run: |
           cd "$HOME"
           git clone --depth=1 https://github.com/osm0sis/AnyKernel3 ak3
@@ -143,13 +196,82 @@ jobs:
           split_boot;
           flash_boot;
           EOF
-          ZIP="${KERNEL_NAME}-${KVER}-GKI-$(date +%Y%m%d).zip"
+          ZIP="${KERNEL_NAME}-${KVER}-GKI-${TICK}hz-$(date +%Y%m%d).zip"
           zip -r9 "$HOME/$ZIP" . -x '.git*'
           echo "ZIP_NAME=$ZIP" >> "$GITHUB_ENV"
           echo "ZIP_PATH=$HOME/$ZIP" >> "$GITHUB_ENV"
 
-      - name: Upload zip
+          # --- runtime tweaks as a KernelSU-style module (installed from the manager app) ---
+          mkdir -p "$HOME/tweaks" && cd "$HOME/tweaks"
+          cat > module.prop <<'EOF'
+          id=fluxneokernel_tweaks
+          name=fluxneokernel tweaks
+          version=v1.0
+          versionCode=1
+          author=fluxneokernel
+          description=Moderate runtime tweaks for fluxneokernel: VM, network, block queue. Remove the module to undo.
+          EOF
+          cat > service.sh <<'EOF'
+          #!/system/bin/sh
+          # fluxneokernel tweaks - moderate values, applied once after boot
+          until [ "$(getprop sys.boot_completed)" = "1" ]; do sleep 2; done
+          sleep 20
+          w() { [ -w "$1" ] && echo "$2" > "$1"; }
+
+          # memory / zram
+          w /proc/sys/vm/swappiness 100
+          w /proc/sys/vm/vfs_cache_pressure 60
+          w /proc/sys/vm/page-cluster 0
+
+          # network
+          w /proc/sys/net/core/default_qdisc fq
+          w /proc/sys/net/ipv4/tcp_congestion_control bbr
+          w /proc/sys/net/ipv4/tcp_fastopen 3
+          w /proc/sys/net/ipv4/tcp_slow_start_after_idle 0
+
+          # block queues (UFS / eMMC): bigger readahead, less bookkeeping
+          for q in /sys/block/sd*/queue /sys/block/mmcblk*/queue; do
+            [ -d "$q" ] || continue
+            w "$q/read_ahead_kb" 256
+            w "$q/iostats" 0
+            w "$q/add_random" 0
+          done
+          EOF
+          chmod 755 service.sh
+          MOD="${KERNEL_NAME}-tweaks-module.zip"
+          zip -r9 "$HOME/$MOD" .
+          echo "MOD_PATH=$HOME/$MOD" >> "$GITHUB_ENV"
+
+      - name: Upload artifacts
         uses: actions/upload-artifact@v4
         with:
-          name: ${{ env.ZIP_NAME }}
-          path: ${{ env.ZIP_PATH }}
+          name: fluxneokernel-${{ env.KVER }}
+          path: |
+            ${{ env.ZIP_PATH }}
+            ${{ env.MOD_PATH }}
+            /home/runner/effective-config.txt
+
+      - name: Publish GitHub release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          UNAME=$(strings "$HOME"/kernel/out/*/dist/Image | grep -m1 "Linux version" || true)
+          {
+            echo "fluxneokernel $KVER (GKI android12-5.10), ${TICK} Hz tick"
+            echo
+            echo "- Root driver: ${ROOT_INFO:-none}"
+            echo "- SUSFS: ${SUSFS_INFO:-not included}"
+            echo "- Network: BBR default, fq, Westwood available; Kyber and BFQ selectable"
+            echo
+            echo "Kernel: $UNAME"
+            echo
+            echo "Flash the kernel zip (AnyKernel3). Install the tweaks zip from your root manager (optional)."
+            echo
+            echo "Effective config:"
+            echo '```'
+            cat "$HOME/effective-config.txt"
+            echo '```'
+          } > "$HOME/notes.md"
+          gh release create "${KVER}-r${{ github.run_number }}" "$ZIP_PATH" "$MOD_PATH" \
+            --repo "$GITHUB_REPOSITORY" --title "fluxneokernel $KVER ($TICK Hz)" \
+            --notes-file "$HOME/notes.md" --prerelease
