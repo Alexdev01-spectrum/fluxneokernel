@@ -1,0 +1,131 @@
+run 5 root=nova-susfs hz=1000
+== compiler/linker errors ==
+2533:/home/runner/kernel/common/fs/susfs.c:78:2: error: implicit declaration of function 'SUSFS_LOGI_RL' [-Werror,-Wimplicit-function-declaration]
+2539:/home/runner/kernel/common/fs/susfs.c:155:2: error: implicit declaration of function 'SUSFS_LOGI_RL' [-Werror,-Wimplicit-function-declaration]
+== context before first make failure ==
+  CC      sound/soc/soc-utils.o
+  CC      drivers/pci/remove.o
+  CC      sound/soc/soc-dai.o
+  CC      fs/pnode.o
+  CC      drivers/pci/pci.o
+  CC      fs/splice.o
+  CC      net/core/utils.o
+  CC      sound/soc/soc-component.o
+  CC      drivers/pci/pci-driver.o
+  CC      sound/soc/soc-pcm.o
+  CC      net/core/link_watch.o
+  CC      fs/sync.o
+  CC      drivers/pci/search.o
+  CC      sound/soc/soc-devres.o
+  CC      fs/utimes.o
+  CC      net/core/filter.o
+  CC      fs/d_path.o
+  CC      drivers/pci/pci-sysfs.o
+  CC      sound/soc/soc-ops.o
+  CC      drivers/pci/rom.o
+  CC      fs/stack.o
+  CC      sound/soc/soc-link.o
+  CC      fs/fs_struct.o
+  CC      drivers/pci/setup-res.o
+  CC      sound/soc/soc-card.o
+  CC      fs/statfs.o
+  CC      drivers/pci/irq.o
+  CC      net/core/sock_diag.o
+  CC      sound/soc/soc-topology.o
+  CC      drivers/pci/vpd.o
+  CC      fs/fs_pin.o
+  CC      fs/nsfs.o
+  CC      sound/soc/soc-generic-dmaengine-pcm.o
+  CC      drivers/pci/setup-bus.o
+  CC      net/core/dev_ioctl.o
+  CC      fs/fs_types.o
+  CC      fs/fs_context.o
+  CC      sound/soc/soc-compress.o
+  CC      drivers/pci/vc.o
+  CC      drivers/pci/mmap.o
+  CC      net/core/tso.o
+  CC      fs/fs_parser.o
+  AR      sound/soc/built-in.a
+  AR      sound/atmel/built-in.a
+  AR      sound/hda/built-in.a
+  AR      sound/x86/built-in.a
+  AR      sound/xen/built-in.a
+  CC      sound/sound_core.o
+  CC      drivers/pci/setup-irq.o
+  CC      fs/fsopen.o
+  CC      drivers/pci/proc.o
+  CC      sound/last.o
+  AR      sound/built-in.a
+  CC      net/core/sock_reuseport.o
+  CC      net/llc/llc_core.o
+  CC      fs/init.o
+  CC      drivers/pci/slot.o
+  CC      fs/kernel_read_file.o
+  CC      drivers/pci/of.o
+  CC      net/llc/llc_input.o
+  CC      fs/remap_range.o
+  CC      net/core/fib_notifier.o
+  CC      drivers/pci/quirks.o
+  CC      net/llc/llc_output.o
+  CC      fs/susfs.o
+  CC      net/core/xdp.o
+/home/runner/kernel/common/fs/susfs.c:78:2: error: implicit declaration of function 'SUSFS_LOGI_RL' [-Werror,-Wimplicit-function-declaration]
+        SUSFS_LOGI_RL("secctx '%s', type '%u', has been added to SUS_TYPE_HLIST\n",
+        ^
+  AR      net/llc/built-in.a
+  CC      drivers/video/backlight/backlight.o
+  CC      drivers/pci/msi.o
+/home/runner/kernel/common/fs/susfs.c:155:2: error: implicit declaration of function 'SUSFS_LOGI_RL' [-Werror,-Wimplicit-function-declaration]
+        SUSFS_LOGI_RL("av_rule '%u %u %u %u' has been added to SUS_AVD_ALLOWED_HLIST\n",
+        ^
+  CC      net/core/flow_offload.o
+  AR      drivers/video/backlight/built-in.a
+  CC      drivers/video/fbdev/core/fb_cmdline.o
+  CC      drivers/pci/ats.o
+2 errors generated.
+make[2]: *** [/home/runner/kernel/common/scripts/Makefile.build:273: fs/susfs.o] Error 1
+  CC      fs/buffer.o
+  AR      drivers/video/fbdev/core/built-in.a
+  AR      drivers/video/fbdev/omap2/omapfb/dss/built-in.a
+  AR      drivers/video/fbdev/omap2/omapfb/displays/built-in.a
+== tail ==
+  AR      drivers/ras/built-in.a
+  CC      drivers/hid/wacom_sys.o
+  CC      drivers/android/binderfs.o
+  CC      drivers/nvmem/core.o
+  CC      drivers/hid/hid-wiimote-core.o
+  AR      drivers/iio/built-in.a
+  CC      drivers/android/binder.o
+  CC      drivers/hid/hid-wiimote-modules.o
+  CC      drivers/gnss/core.o
+  CC      drivers/hid/hid-wiimote-debug.o
+  AR      drivers/nvmem/built-in.a
+  CC      drivers/android/binder_alloc.o
+  AR      drivers/hid/built-in.a
+  CC      drivers/interconnect/core.o
+  AR      drivers/gnss/built-in.a
+  CC      drivers/interconnect/bulk.o
+-- KDIR: 
+-- MDIR: /home/runner/kernel/KernelSU/kernel
+  CC      drivers/android/debug_symbols.o
+  AR      drivers/interconnect/built-in.a
+  CC      drivers/android/vendor_hooks.o
+-- SukiSU-Nova version: 30007 [v3.0.0-5a3ec414@builtin-new]
+-- KERNEL_VERSION: 5.10
+-- KERNEL_TYPE: GKI 2.0
+-- SukiSU-Nova: using SUSFS_INLINE_HOOK
+-- KPM is disabled
+-- KernelSU Manager package name: com.sukisu.nova
+-- KernelSU Manager signature size: 0x35c
+-- KernelSU Manager signature hash: 947ae944f3de4ed4c21a7e4f7953ecf351bfa2b36239da37a34111ad29993eef
+-- KernelSU/compat: iterate_dir found!
+-- KernelSU/compat: f_op->read_iter found!
+
+-- SUSFS_VERSION: v2.4.0
+  CC      drivers/kernelsu/ksu.o
+  AR      drivers/android/built-in.a
+  AR      drivers/kernelsu/built-in.a
+  AR      drivers/built-in.a
+make[1]: Target 'Image' not remade because of errors.
+make: *** [/home/runner/kernel/common/Makefile:192: __sub-make] Error 2
+make: Target 'Image' not remade because of errors.
