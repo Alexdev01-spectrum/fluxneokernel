@@ -80,8 +80,15 @@ jobs:
 
       - name: Pin source to the target sublevel
         run: |
+          exec > >(tee -a "$HOME/steps.log") 2>&1
           cd "$HOME/kernel/common"
-          git fetch --no-tags --depth=6000 "$(git remote | head -n1)" android12-5.10
+          REMOTE=$(git remote | head -n1)
+          ok=0
+          for i in 1 2 3 4 5; do
+            if git fetch --no-tags --depth=6000 "$REMOTE" android12-5.10; then ok=1; break; fi
+            echo "fetch attempt $i failed, retrying in 30s"; sleep 30
+          done
+          if [ "$ok" != 1 ]; then echo "::error::could not fetch android12-5.10 history from Google after 5 tries"; exit 1; fi
           set +o pipefail
           FOUND=""
           for c in $(git rev-list --first-parent FETCH_HEAD); do
@@ -130,6 +137,7 @@ jobs:
       - name: Add root driver
         if: env.ROOT_DRIVER != 'none'
         run: |
+          exec > >(tee -a "$HOME/steps.log") 2>&1
           cd "$HOME/kernel"
           if [ "$ROOT_DRIVER" = "fluxsu" ]; then
             REPO=https://github.com/Alexdev01-spectrum/FluxSU; BR=main
@@ -148,6 +156,7 @@ jobs:
       - name: Apply SUSFS kernel patch
         if: env.ROOT_DRIVER == 'nova-susfs'
         run: |
+          exec > >(tee -a "$HOME/steps.log") 2>&1
           cd "$HOME"
           git clone --depth=1 -b "$SUSFS_BRANCH" https://gitlab.com/simonpunk/susfs4ksu.git susfs4ksu
           SUSFS_COMMIT=$(git -C susfs4ksu rev-parse --short HEAD)
@@ -175,6 +184,7 @@ jobs:
 
       - name: Apply branding, baked-in tweaks and config
         run: |
+          exec > >(tee -a "$HOME/steps.log") 2>&1
           cd "$HOME/kernel/common"
           S=scripts/config
           F=arch/arm64/configs/gki_defconfig
@@ -321,6 +331,7 @@ jobs:
           B="$HOME/build.log"
           {
             echo "run ${{ github.run_number }} root=$ROOT_DRIVER hz=$TICK"
+            if [ -f "$HOME/steps.log" ]; then echo "== pre-build steps log (tail) =="; tail -60 "$HOME/steps.log" | cut -c1-300; fi
             if [ -f "$B" ]; then
               sed 's/\x1b\[[0-9;]*[a-zA-Z]//g' "$B" > "$HOME/clean.log"
               echo "== compiler/linker errors =="
