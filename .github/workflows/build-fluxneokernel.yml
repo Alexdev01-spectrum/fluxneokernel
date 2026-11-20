@@ -185,13 +185,14 @@ jobs:
           import sys
           tick = sys.argv[1]
           if tick == "500":
-              p = "arch/Kconfig.hz"
+              import os
+              p = "kernel/Kconfig.hz" if os.path.exists("kernel/Kconfig.hz") else "arch/Kconfig.hz"
               s = open(p).read()
               if "HZ_500" not in s:
                   a = '\tconfig HZ_1000\n\t\tbool "1000 HZ"'
                   c = "\tdefault 1000 if HZ_1000"
                   if a not in s or c not in s:
-                      print("::error::arch/Kconfig.hz layout differs, cannot add 500 Hz")
+                      print("::error::Kconfig.hz layout differs, cannot add 500 Hz")
                       sys.exit(1)
                   s = s.replace(a, '\tconfig HZ_500\n\t\tbool "500 HZ"\n\t\thelp\n\t\t 500 Hz balanced tick rate.\n\n' + a, 1)
                   s = s.replace(c, "\tdefault 500 if HZ_500\n" + c, 1)
@@ -217,7 +218,7 @@ jobs:
           patch("fs/dcache.c", r"^(int sysctl_vfs_cache_pressure __read_mostly = )100;", r"\g<1>60;", "vfs_cache_pressure 100 -> 60")
           patch("net/ipv4/tcp_ipv4.c", r"(net->ipv4\.sysctl_tcp_slow_start_after_idle = )1;", r"\g<1>0;", "tcp_slow_start_after_idle 1 -> 0")
           patch("net/ipv4/tcp_ipv4.c", r"(net->ipv4\.sysctl_tcp_fastopen = )TFO_CLIENT_ENABLE;", r"\g<1>TFO_CLIENT_ENABLE | TFO_SERVER_ENABLE;", "tcp_fastopen client+server")
-          patch("include/linux/mm.h", r"^(#define VM_READAHEAD_PAGES\s+\()SZ_128K( / PAGE_SIZE\))", r"\g<1>SZ_256K\g<2>", "default readahead 128K -> 256K")
+          patch("include/linux/pagemap.h", r"^(#define VM_READAHEAD_PAGES\s+\()SZ_128K( / PAGE_SIZE\))", r"\g<1>SZ_256K\g<2>", "default readahead 128K -> 256K")
           out = "\n".join(["applied: " + a for a in applied] + ["skipped: " + x for x in skipped]) + "\n"
           open(os.environ["HOME"] + "/tweaks-applied.txt", "w").write(out)
           print(out)
@@ -249,7 +250,9 @@ jobs:
           #!/bin/sh
           d=\$(dirname "\$0")
           out=\$(sh "\$d/setlocalversion.orig" "\$@")
+          rc=\$?
           printf '%s' "\$out" | sed -E 's/-g[0-9a-f]{7,40}/-${VERSION_SUFFIX}/; s/-dirty//'
+          exit \$rc
           EOS
             chmod +x scripts/setlocalversion
           fi
