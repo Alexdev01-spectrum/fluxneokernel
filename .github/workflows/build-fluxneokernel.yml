@@ -7,10 +7,10 @@ on:
         description: "5.10 sublevel to build (stops if Google's branch has no commit at this sublevel)"
         default: "270"
       tick_hz:
-        description: "Kernel tick rate"
+        description: "Kernel tick rate (500 needs a small Kconfig patch, applied automatically)"
         type: choice
-        options: ["1000", "300", "250"]
-        default: "1000"
+        options: ["500", "250", "300", "1000"]
+        default: "500"
       root_driver:
         description: "nova-susfs = SukiSU-Nova driver with SUSFS (default). fluxsu = your FluxSU driver (no SUSFS in it yet)."
         type: choice
@@ -22,6 +22,15 @@ on:
       susfs_branch:
         description: "susfs4ksu (gitlab simonpunk) branch for the kernel patch"
         default: "gki-android12-5.10"
+      version_suffix:
+        description: "Suffix in the kernel release string (uname -r)"
+        default: "fluxneokernel"
+      build_user:
+        description: "user shown in /proc/version"
+        default: "flux"
+      build_host:
+        description: "host shown in /proc/version"
+        default: "neokernel"
 
 permissions:
   contents: write
@@ -38,6 +47,9 @@ jobs:
       ROOT_DRIVER: ${{ inputs.root_driver }}
       NOVA_BRANCH: ${{ inputs.nova_branch }}
       SUSFS_BRANCH: ${{ inputs.susfs_branch }}
+      VERSION_SUFFIX: ${{ inputs.version_suffix }}
+      BUILD_USER_NAME: ${{ inputs.build_user }}
+      BUILD_HOST_NAME: ${{ inputs.build_host }}
 
     steps:
       - name: Free disk space
@@ -85,6 +97,36 @@ jobs:
           echo "Building 5.10.$(sed -n 's/^SUBLEVEL = *//p' Makefile | head -n1) at $FOUND"
           echo "KVER=5.10.$TARGET" >> "$GITHUB_ENV"
 
+      - name: Report which listed fixes this tree contains
+        run: |
+          cd "$HOME/kernel/common"
+          rep() {
+            name="$1"; pat="$2"
+            hit=$(git log --oneline -i -E --grep="$pat" HEAD | head -n1)
+            if [ -n "$hit" ]; then echo "[in tree   ] $name: $hit"; return; fi
+            hit=$(git log --oneline -i -E --grep="$pat" FETCH_HEAD | head -n1)
+            if [ -n "$hit" ]; then echo "[newer only] $name: $hit"; else echo "[not found ] $name"; fi
+          }
+          {
+            rep "Arm Optimized Routines string functions" "Optimized Routines|Cortex Strings"
+            rep "cpuidle menu/teo disabled state" "cpuidle: (menu|teo)"
+            rep "uclamp_max iowait boost" "uclamp"
+            rep "freezer_should_skip on_rq" "freezer"
+            rep "binder TF_UPDATE_TXN" "TF_UPDATE_TXN"
+            rep "PSI trigger use-after-free" "psi.*(use-after-free|race)"
+            rep "f2fs infinite loop" "f2fs.*(infinite|endless) loop"
+            rep "UFS shutdown/divide fixes" "ufs.*(shutdown|divide)"
+            rep "FUSE passthrough" "fuse.*passthrough"
+            rep "erofs double free" "erofs.*double free"
+            rep "iomap writeback corruption" "iomap.*(writeback|corruption)"
+            rep "freeze_bdev accounting" "freeze_bdev"
+            rep "USB f_midi / u_serial" "f_midi|u_serial"
+            rep "CMA in swap-in" "(cma|CMA).*swap|swap.*(cma|CMA)"
+            rep "swap-in workingset" "swap.*workingset|workingset.*swap"
+            rep "zram reset/disksize race" "zram.*(reset|disksize)"
+            rep "schedutil next_freq on limits change" "schedutil.*(next_freq|limits)"
+          } | tee "$HOME/fixes-report.txt"
+
       - name: Add root driver
         if: env.ROOT_DRIVER != 'none'
         run: |
@@ -131,18 +173,93 @@ jobs:
             printf '\n#ifndef SUSFS_LOGI_RL\n#define SUSFS_LOGI_RL(fmt, ...) pr_info_ratelimited(fmt, ##__VA_ARGS__)\n#endif\n' >> include/linux/susfs.h
           fi
 
-      - name: Apply tweaks and prepare config
+      - name: Apply branding, baked-in tweaks and config
         run: |
           cd "$HOME/kernel/common"
           S=scripts/config
           F=arch/arm64/configs/gki_defconfig
-          # tick rate
-          for h in 100 250 300 1000; do [ "$h" = "$TICK" ] || $S --file $F -d HZ_$h; done
+          echo "stock HZ lines in gki_defconfig: $(grep -E '^CONFIG_HZ' $F | tr '\n' ' ')"
+
+          # 500 Hz is not in mainline Kconfig.hz (100/250/300/1000): add it
+          python3 - "$TICK" <<'PY'
+          import sys
+          tick = sys.argv[1]
+          if tick == "500":
+              p = "arch/Kconfig.hz"
+              s = open(p).read()
+              if "HZ_500" not in s:
+                  a = '\tconfig HZ_1000\n\t\tbool "1000 HZ"'
+                  c = "\tdefault 1000 if HZ_1000"
+                  if a not in s or c not in s:
+                      print("::error::arch/Kconfig.hz layout differs, cannot add 500 Hz")
+                      sys.exit(1)
+                  s = s.replace(a, '\tconfig HZ_500\n\t\tbool "500 HZ"\n\t\thelp\n\t\t 500 Hz balanced tick rate.\n\n' + a, 1)
+                  s = s.replace(c, "\tdefault 500 if HZ_500\n" + c, 1)
+                  open(p, "w").write(s)
+              print("500 Hz option available")
+          PY
+
+          # baked-in runtime defaults (each patch is verified, never fatal)
+          python3 - <<'PY'
+          import re, os
+          applied, skipped = [], []
+          def patch(path, pat, rep, name):
+              try:
+                  s = open(path).read()
+              except OSError:
+                  skipped.append("%s: %s missing" % (name, path)); return
+              n, c = re.subn(pat, rep, s, count=1, flags=re.M)
+              if c:
+                  open(path, "w").write(n); applied.append(name)
+              else:
+                  skipped.append("%s: pattern not found" % name)
+          patch("mm/vmscan.c", r"^(int vm_swappiness = )60;", r"\g<1>100;", "vm.swappiness 60 -> 100")
+          patch("fs/dcache.c", r"^(int sysctl_vfs_cache_pressure __read_mostly = )100;", r"\g<1>60;", "vfs_cache_pressure 100 -> 60")
+          patch("net/ipv4/tcp_ipv4.c", r"(net->ipv4\.sysctl_tcp_slow_start_after_idle = )1;", r"\g<1>0;", "tcp_slow_start_after_idle 1 -> 0")
+          patch("net/ipv4/tcp_ipv4.c", r"(net->ipv4\.sysctl_tcp_fastopen = )TFO_CLIENT_ENABLE;", r"\g<1>TFO_CLIENT_ENABLE | TFO_SERVER_ENABLE;", "tcp_fastopen client+server")
+          patch("include/linux/mm.h", r"^(#define VM_READAHEAD_PAGES\s+\()SZ_128K( / PAGE_SIZE\))", r"\g<1>SZ_256K\g<2>", "default readahead 128K -> 256K")
+          out = "\n".join(["applied: " + a for a in applied] + ["skipped: " + x for x in skipped]) + "\n"
+          open(os.environ["HOME"] + "/tweaks-applied.txt", "w").write(out)
+          print(out)
+          PY
+
+          # tidy compiler banner in /proc/version
+          python3 - <<'PY'
+          p = "scripts/mkcompile_h"
+          s = open(p).read()
+          marker = "#define LINUX_COMPILER"
+          if marker in s and "flux-clean" not in s:
+              out = []
+              for ln in s.split("\n"):
+                  if marker in ln:
+                      out.append("# flux-clean: tidy compiler banner")
+                      out.append(r"""CC_VERSION=$(printf '%s' "$CC_VERSION" | sed -E 's/ \(https?:[^)]*\)//g; s/ \([0-9]+, based on [^)]*\)//g')""")
+                      out.append(r"""LD_VERSION=$(printf '%s' "$LD_VERSION" | sed -E 's/ \(\/[^)]*\)//g')""")
+                  out.append(ln)
+              open(p, "w").write("\n".join(out))
+              print("compiler banner patched")
+          else:
+              print("compiler banner left as is")
+          PY
+
+          # release string: <ver>-android12-9-<suffix> (keeps the KMI part, drops the git hash)
+          if [ -f scripts/setlocalversion ] && [ ! -f scripts/setlocalversion.orig ]; then
+            mv scripts/setlocalversion scripts/setlocalversion.orig
+            cat > scripts/setlocalversion <<EOS
+          #!/bin/sh
+          d=\$(dirname "\$0")
+          out=\$(sh "\$d/setlocalversion.orig" "\$@")
+          printf '%s' "\$out" | sed -E 's/-g[0-9a-f]{7,40}/-${VERSION_SUFFIX}/; s/-dirty//'
+          EOS
+            chmod +x scripts/setlocalversion
+          fi
+
+          # config
+          for h in 100 250 300 500 1000; do [ "$h" = "$TICK" ] || $S --file $F -d HZ_$h; done
           $S --file $F -e HZ_$TICK
-          # network: BBR default + fq pacing, Westwood available
           $S --file $F -e TCP_CONG_ADVANCED -e TCP_CONG_BBR -e TCP_CONG_WESTWOOD \
-                       -d DEFAULT_CUBIC -e DEFAULT_BBR -e NET_SCH_FQ -e NET_SCH_FQ_CODEL
-          # extra I/O schedulers selectable at runtime (default stays as shipped)
+                       -d DEFAULT_CUBIC -e DEFAULT_BBR -e NET_SCH_FQ -e NET_SCH_FQ_CODEL \
+                       -e NET_SCH_DEFAULT -e DEFAULT_FQ -d DEFAULT_PFIFO_FAST
           $S --file $F -e MQ_IOSCHED_KYBER -e IOSCHED_BFQ
           if [ "$ROOT_DRIVER" != "none" ]; then
             $S --file $F -e KSU -e KPROBES -e KPROBE_EVENTS
@@ -168,10 +285,13 @@ jobs:
           MAKE_GOALS="Image"
           EOF
           git add -A
-          git commit -qm "fluxneokernel: tweaks, susfs, config"
+          git commit -qm "fluxneokernel: branding, baked-in tweaks, susfs, config"
 
       - name: Build GKI kernel
         shell: bash
+        env:
+          KBUILD_BUILD_USER: ${{ inputs.build_user }}
+          KBUILD_BUILD_HOST: ${{ inputs.build_host }}
         run: |
           cd "$HOME/kernel"
           set +e
@@ -186,7 +306,9 @@ jobs:
           [ "$RC" -ne 0 ] && echo "::warning::build.sh exited $RC after producing the Image (post-build packaging only)"
           echo "IMAGE_PATH=$IMG" >> "$GITHUB_ENV"
           ls -lh "$IMG"
-          strings "$IMG" | grep -m1 "Linux version" || true
+          BANNER=$(strings -a "$IMG" | grep -m1 -a '^Linux version 5\.' || true)
+          echo "$BANNER"
+          case "$BANNER" in *"$VERSION_SUFFIX"*) ;; *) echo "::warning::release string does not contain the suffix (branding patch did not apply)";; esac
 
       - name: Save failure log to repo
         if: failure()
@@ -216,9 +338,9 @@ jobs:
         run: |
           CFG=$(find "$HOME/kernel/out" -name .config -path '*common*' | head -n1)
           echo "Config file: $CFG"
-          grep -E '^CONFIG_(HZ|HZ_[0-9]+|TCP_CONG_BBR|TCP_CONG_WESTWOOD|DEFAULT_TCP_CONG|NET_SCH_FQ|MQ_IOSCHED_KYBER|IOSCHED_BFQ|PREEMPT|KSU[A-Z_]*|KPROBES)[= ]' "$CFG" | tee "$HOME/effective-config.txt"
+          grep -E '^CONFIG_(HZ|HZ_[0-9]+|TCP_CONG_BBR|TCP_CONG_WESTWOOD|DEFAULT_TCP_CONG|DEFAULT_NET_SCH|NET_SCH_FQ|LOCALVERSION[A-Z_]*|MQ_IOSCHED_KYBER|IOSCHED_BFQ|PREEMPT|KSU[A-Z_]*|KPROBES)[= ]' "$CFG" | tee "$HOME/effective-config.txt"
 
-      - name: Package kernel (AnyKernel3) and tweaks module
+      - name: Package kernel (AnyKernel3)
         run: |
           cd "$HOME"
           git clone --depth=1 https://github.com/osm0sis/AnyKernel3 ak3
@@ -250,51 +372,12 @@ jobs:
           split_boot;
           flash_boot;
           EOF
-          ZIP="${KERNEL_NAME}-${KVER}-GKI-${TICK}hz-$(date +%Y%m%d).zip"
+          sed -i "s/^kernel.string=.*/kernel.string=fluxneokernel ${KVER} (${TICK} Hz)/" anykernel.sh
+          case "$ROOT_DRIVER" in nova-susfs) TAG=susfs;; fluxsu) TAG=fluxsu;; *) TAG=noroot;; esac
+          ZIP="${KERNEL_NAME}-${KVER}-${TICK}hz-${TAG}-$(date +%Y%m%d).zip"
           zip -r9 "$HOME/$ZIP" . -x '.git*'
           echo "ZIP_NAME=$ZIP" >> "$GITHUB_ENV"
           echo "ZIP_PATH=$HOME/$ZIP" >> "$GITHUB_ENV"
-
-          # --- runtime tweaks as a KernelSU-style module (installed from the manager app) ---
-          mkdir -p "$HOME/tweaks" && cd "$HOME/tweaks"
-          cat > module.prop <<'EOF'
-          id=fluxneokernel_tweaks
-          name=fluxneokernel tweaks
-          version=v1.0
-          versionCode=1
-          author=fluxneokernel
-          description=Moderate runtime tweaks for fluxneokernel: VM, network, block queue. Remove the module to undo.
-          EOF
-          cat > service.sh <<'EOF'
-          #!/system/bin/sh
-          # fluxneokernel tweaks - moderate values, applied once after boot
-          until [ "$(getprop sys.boot_completed)" = "1" ]; do sleep 2; done
-          sleep 20
-          w() { [ -w "$1" ] && echo "$2" > "$1"; }
-
-          # memory / zram
-          w /proc/sys/vm/swappiness 100
-          w /proc/sys/vm/vfs_cache_pressure 60
-          w /proc/sys/vm/page-cluster 0
-
-          # network
-          w /proc/sys/net/core/default_qdisc fq
-          w /proc/sys/net/ipv4/tcp_congestion_control bbr
-          w /proc/sys/net/ipv4/tcp_fastopen 3
-          w /proc/sys/net/ipv4/tcp_slow_start_after_idle 0
-
-          # block queues (UFS / eMMC): bigger readahead, less bookkeeping
-          for q in /sys/block/sd*/queue /sys/block/mmcblk*/queue; do
-            [ -d "$q" ] || continue
-            w "$q/read_ahead_kb" 256
-            w "$q/iostats" 0
-            w "$q/add_random" 0
-          done
-          EOF
-          chmod 755 service.sh
-          MOD="${KERNEL_NAME}-tweaks-module.zip"
-          zip -r9 "$HOME/$MOD" .
-          echo "MOD_PATH=$HOME/$MOD" >> "$GITHUB_ENV"
 
       - name: Upload artifacts
         uses: actions/upload-artifact@v4
@@ -302,30 +385,44 @@ jobs:
           name: fluxneokernel-${{ env.KVER }}
           path: |
             ${{ env.ZIP_PATH }}
-            ${{ env.MOD_PATH }}
             /home/runner/effective-config.txt
 
       - name: Publish GitHub release
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          UNAME=$(strings "$IMAGE_PATH" | grep -m1 "Linux version" || true)
+          BANNER=$(strings -a "$IMAGE_PATH" | grep -m1 -a '^Linux version 5\.' || true)
           {
             echo "fluxneokernel $KVER (GKI android12-5.10), ${TICK} Hz tick"
             echo
             echo "- Root driver: ${ROOT_INFO:-none}"
             echo "- SUSFS: ${SUSFS_INFO:-not included}"
-            echo "- Network: BBR default, fq, Westwood available; Kyber and BFQ selectable"
+            echo "- Network: BBR + fq by default, Westwood available; Kyber and BFQ selectable"
             echo
-            echo "Kernel: $UNAME"
+            echo "Version string:"
+            echo '```'
+            echo "$BANNER"
+            echo '```'
             echo
-            echo "Flash the kernel zip (AnyKernel3). Install the tweaks zip from your root manager (optional)."
+            echo "Baked-in defaults:"
+            echo '```'
+            cat "$HOME/tweaks-applied.txt"
+            echo '```'
             echo
-            echo "Effective config:"
+            echo "<details><summary>Upstream fixes: what this tree contains</summary>"
+            echo
+            echo '```'
+            cat "$HOME/fixes-report.txt"
+            echo '```'
+            echo "</details>"
+            echo
+            echo "<details><summary>Effective config</summary>"
+            echo
             echo '```'
             cat "$HOME/effective-config.txt"
             echo '```'
+            echo "</details>"
           } > "$HOME/notes.md"
-          gh release create "${KVER}-r${{ github.run_number }}" "$ZIP_PATH" "$MOD_PATH" \
+          gh release create "${KVER}-r${{ github.run_number }}" "$ZIP_PATH" \
             --repo "$GITHUB_REPOSITORY" --title "fluxneokernel $KVER ($TICK Hz)" \
             --notes-file "$HOME/notes.md" --prerelease
