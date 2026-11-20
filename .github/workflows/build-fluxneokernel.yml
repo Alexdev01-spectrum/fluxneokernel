@@ -236,12 +236,16 @@ jobs:
 
           # tidy compiler banner in /proc/version
           python3 - <<'PY'
+          import os
           p = "scripts/mkcompile_h"
           s = open(p).read()
           marker = "#define LINUX_COMPILER"
           if marker in s and "flux-clean" not in s:
               out = []
               for ln in s.split("\n"):
+                  if "#define LINUX_COMPILE_BY" in ln:
+                      out.append('LINUX_COMPILE_BY="%s"' % os.environ.get("BUILD_USER_NAME", "flux"))
+                      out.append('LINUX_COMPILE_HOST="%s"' % os.environ.get("BUILD_HOST_NAME", "neokernel"))
                   if marker in ln:
                       out.append("# flux-clean: tidy compiler banner")
                       out.append(r"""CC_VERSION=$(printf '%s' "$CC_VERSION" | sed -E 's/ \(https?:[^)]*\)//g; s/ \([0-9]+, based on [^)]*\)//g')""")
