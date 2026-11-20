@@ -1,0 +1,2 @@
+run 12 root=none hz=500
+no build.log (failed before the build step)
